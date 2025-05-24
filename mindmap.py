@@ -1,52 +1,25 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template
 import pytesseract
 from pdf2image import convert_from_bytes
 from pptx import Presentation
 from transformers import pipeline
+import torchvision
+torchvision.disable_beta_transforms_warning()  # Silence torchvision warnings
 import io
 import re
 
 app = Flask(__name__)
 
-# Initialize summarizer (BART model from Hugging Face)
+# Initialize summarizer
 summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
-
-# HTML template for the frontend
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Mind Map Generator</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        pre { background: #f4f4f4; padding: 10px; border-radius: 5px; }
-        .error { color: red; }
-    </style>
-</head>
-<body>
-    <h1>Upload PDF or PPTX to Generate Mind Map</h1>
-    <form method="post" enctype="multipart/form-data">
-        <input type="file" name="file" accept=".pdf,.pptx" required>
-        <input type="submit" value="Generate Mind Map">
-    </form>
-    {% if mind_map %}
-        <h2>Generated Mind Map</h2>
-        <pre>{{ mind_map }}</pre>
-    {% endif %}
-    {% if error %}
-        <p class="error">{{ error }}</p>
-    {% endif %}
-</body>
-</html>
-"""
 
 def extract_text_from_pdf(file):
     try:
         images = convert_from_bytes(file.read())
         text = ""
         for image in images:
-            text += pytesseract.image_to_string(image)
-        return text
+            text += pytesseract.image_to_string(image) + "\n"
+        return text, None
     except Exception as e:
         return None, str(e)
 
@@ -63,24 +36,18 @@ def extract_text_from_pptx(file):
         return None, str(e)
 
 def summarize_text(text):
-    # Clean text and limit length for summarization
     text = re.sub(r'\s+', ' ', text).strip()
-    max_input_length = 1024  # BART's max input length
+    max_input_length = 1024
     text = text[:max_input_length]
-    
-    # Summarize using BART
     summary = summarizer(text, max_length=150, min_length=50, do_sample=False)
     return summary[0]['summary_text']
 
 def generate_ascii_mind_map(summary):
-    # Simple logic to break summary into key points
     sentences = re.split(r'[.!?]\s+', summary)
     key_points = [s.strip() for s in sentences if s.strip()]
-    
-    # Generate ASCII tree
     mind_map = "Mind Map\n"
     mind_map += "└── Main Topic\n"
-    for i, point in enumerate(key_points[:5], 1):  # Limit to 5 points for brevity
+    for i, point in enumerate(key_points[:5], 1):
         mind_map += f"    ├── {point}\n"
     return mind_map
 
@@ -111,7 +78,7 @@ def index():
             else:
                 error = err or "Failed to extract text from file."
     
-    return render_template_string(HTML_TEMPLATE, mind_map=mind_map, error=error)
+    return render_template('index.html', mind_map=mind_map, error=error)
 
 if __name__ == "__main__":
     app.run(debug=True)
