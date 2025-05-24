@@ -37,12 +37,12 @@ brew install poppler
 
 🧙‍♂️ Installation
 
-Clone the Repo (or just grab mindmap.py):
+Clone the Repo (or just grab mindmap.py and templates/index.html):
 git clone https://github.com/your-username/mindmap-generator.git
 cd mindmap-generator
 
 
-Set Up a Virtual Environment (because we’re fancy and organized):
+Set Up a Virtual Environment:
 python -m venv mindmap-env
 source mindmap-env/bin/activate
 
@@ -56,6 +56,12 @@ Ensure Tesseract and Poppler are Installed:
 Verify Tesseract: tesseract --version
 Verify Poppler: pdftoppm --version
 If missing, install them with Homebrew (see Requirements above).
+
+
+Create Templates Folder:
+
+Create a templates folder in your project directory.
+Place index.html (from the provided code) in templates/index.html.
 
 
 Launch the Magic:
@@ -90,11 +96,23 @@ Pro Tip: Clear, typed text in PDFs works best for OCR. Handwritten notes might m
 🐛 Troubleshooting
 
 ModuleNotFoundError: No module named 'pptx'?
-You probably tried pip install pptx. Use pip install python-pptx instead!
+Install the correct package: pip install python-pptx.
+
+
+ValueError: too many values to unpack?
+Ensure extract_text_from_pdf in mindmap.py returns exactly two values (text, err). Use the provided mindmap.py version to fix this.
+
+
+TemplateNotFound: index.html?
+Ensure index.html is in a templates folder in your project directory.
 
 
 Tesseract or Poppler missing?
 Install them with brew install tesseract poppler on macOS.
+
+
+Torchvision warnings?
+These are harmless. The provided mindmap.py silences them with torchvision.disable_beta_transforms_warning().
 
 
 Other errors? Check your Python version (python --version) and ensure you’re in the right virtual environment.
