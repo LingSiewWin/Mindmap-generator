@@ -2,22 +2,10 @@
 <html>
 <head>
     <title>Mind Map Generator</title>
-    <script src="https://d3js.org/d3.v7.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <!-- markmap-lib -->
+    <script src="https://cdn.jsdelivr.net/npm/markmap-lib@0.15.3/dist/browser/view.min.js"></script>
     <style>
-        .mindmap-node circle {
-            fill: #fff;
-            stroke: #4299e1;
-            stroke-width: 2px;
-        }
-        .mindmap-node text {
-            font: 12px sans-serif;
-        }
-        .mindmap-link {
-            fill: none;
-            stroke: #ccc;
-            stroke-width: 1.5px;
-        }
         .loading {
             display: none;
             position: fixed;
@@ -35,12 +23,33 @@
             transform: translate(-50%, -50%);
             text-align: center;
         }
+        /* Custom markmap SVG styles */
+        .markmap text {
+            font-family: 'Inter', Arial, sans-serif;
+            font-size: 1rem;
+        }
+        .markmap .markmap-foreign {
+            font-size: 1rem;
+        }
+        .markmap .markmap-node>circle {
+            stroke: #2563eb;
+            stroke-width: 2px;
+        }
+        .markmap .markmap-link {
+            stroke: #a3a3a3;
+            stroke-width: 2px;
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
     <div class="container mx-auto px-4 py-8">
         <div class="text-center mb-8">
-            <h1 class="text-4xl font-bold text-gray-800 mb-2">Mind Map Generator</h1>
+            <h1 class="text-4xl font-bold text-gray-800 mb-2 flex items-center justify-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10 text-blue-500">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75A2.25 2.25 0 0014.25 4.5h-4.5A2.25 2.25 0 007.5 6.75v6.75m9 0V17.25A2.25 2.25 0 0114.25 19.5h-4.5A2.25 2.25 0 017.5 17.25v-3.75m9 0h-9" />
+                </svg>
+                Mind Map Generator
+            </h1>
             <p class="text-gray-600">Upload your documents and let AI create a mind map for you</p>
         </div>
 
@@ -66,13 +75,12 @@
         </div>
 
         <div id="result" class="hidden">
-            <div class="bg-white rounded-lg shadow-md p-6 mb-8">
-                <h2 class="text-2xl font-bold text-gray-800 mb-4">Summary</h2>
-                <p id="summary" class="text-gray-600"></p>
-            </div>
-            
             <div class="bg-white rounded-lg shadow-md p-6">
                 <h2 class="text-2xl font-bold text-gray-800 mb-4">Mind Map</h2>
+                <div class="flex flex-row gap-4 mb-4">
+                    <button id="downloadSvgBtn" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition">Download SVG</button>
+                    <button id="downloadMdBtn" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition">Download Markdown</button>
+                </div>
                 <div id="mindmap" class="w-full h-[600px]"></div>
             </div>
         </div>
@@ -90,6 +98,8 @@
     </div>
 
     <script>
+        let lastMarkdown = '';
+
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const fileInput = document.getElementById('fileInput');
@@ -147,69 +157,65 @@
 
         function showResult(data) {
             document.getElementById('result').classList.remove('hidden');
-            document.getElementById('summary').textContent = data.summary;
-            createMindMap(data.mind_map);
+            lastMarkdown = data.mind_map_markdown;
+            renderMarkmap(data.mind_map_markdown);
         }
 
         function hideResult() {
             document.getElementById('result').classList.add('hidden');
         }
 
-        function createMindMap(data) {
-            const width = document.getElementById('mindmap').clientWidth;
-            const height = 600;
-            const radius = 100;
-
-            // Clear previous mind map
-            d3.select("#mindmap").selectAll("*").remove();
-
-            const svg = d3.select("#mindmap")
-                .append("svg")
-                .attr("width", width)
-                .attr("height", height)
-                .append("g")
-                .attr("transform", `translate(${width/2},${height/2})`);
-
-            const tree = d3.tree()
-                .size([2 * Math.PI, radius])
-                .separation((a, b) => (a.parent == b.parent ? 1 : 2) / a.depth);
-
-            const root = d3.hierarchy(data);
-            const links = tree(root).links();
-            const nodes = root.descendants();
-
-            svg.selectAll(".mindmap-link")
-                .data(links)
-                .enter()
-                .append("path")
-                .attr("class", "mindmap-link")
-                .attr("d", d3.linkRadial()
-                    .angle(d => d.x)
-                    .radius(d => d.y));
-
-            const node = svg.selectAll(".mindmap-node")
-                .data(nodes)
-                .enter()
-                .append("g")
-                .attr("class", "mindmap-node")
-                .attr("transform", d => `
-                    rotate(${d.x * 180 / Math.PI - 90})
-                    translate(${d.y},0)
-                `);
-
-            node.append("circle")
-                .attr("r", 4);
-
-            node.append("text")
-                .attr("dy", ".31em")
-                .attr("x", d => d.x < Math.PI ? 6 : -6)
-                .attr("text-anchor", d => d.x < Math.PI ? "start" : "end")
-                .attr("transform", d => d.x >= Math.PI ? "rotate(180)" : null)
-                .text(d => d.data.name)
-                .clone(true).lower()
-                .attr("stroke", "white")
-                .attr("stroke-width", 3);
+        // Render mind map using markmap-lib
+        function renderMarkmap(markdown) {
+            const mindmapDiv = document.getElementById('mindmap');
+            mindmapDiv.innerHTML = '';
+            const svg = document.createElement('svg');
+            svg.classList.add('markmap');
+            svg.style.width = '100%';
+            svg.style.height = '600px';
+            mindmapDiv.appendChild(svg);
+            window.markmap.autoLoader.render(svg, markdown, {
+                color: (node, i) => {
+                    // Color by depth for branches
+                    const colors = ['#2563eb', '#16a34a', '#f59e42', '#eab308', '#db2777', '#7c3aed'];
+                    return colors[node.depth % colors.length];
+                }
+            });
         }
+
+        // Download SVG
+        document.getElementById('downloadSvgBtn').addEventListener('click', function() {
+            const svg = document.querySelector('#mindmap svg');
+            if (!svg) return;
+            const serializer = new XMLSerializer();
+            let source = serializer.serializeToString(svg);
+            // Add XML declaration
+            if(!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)){
+                source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+            }
+            const svgBlob = new Blob([source], {type: 'image/svg+xml;charset=utf-8'});
+            const url = URL.createObjectURL(svgBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'mindmap.svg';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        // Download Markdown
+        document.getElementById('downloadMdBtn').addEventListener('click', function() {
+            const blob = new Blob([lastMarkdown], {type: 'text/markdown'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'mindmap.md';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
 
         // Drag and drop functionality
         const dropZone = document.querySelector('.border-dashed');

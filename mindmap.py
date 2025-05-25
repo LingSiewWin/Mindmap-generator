@@ -112,6 +112,16 @@ Text: {text}
     except Exception as e:
         return None, str(e)
 
+def outline_to_markdown(node, level=1):
+    md = ''
+    if level == 1:
+        md += f'# {node["name"]}\n'
+    else:
+        md += '  ' * (level - 2) + f'- {node["name"]}\n'
+    for child in node.get('children', []):
+        md += outline_to_markdown(child, level + 1)
+    return md
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
@@ -137,8 +147,9 @@ def index():
             try:
                 outline, err = extract_hierarchical_outline_with_ollama(text)
                 if outline:
+                    markdown = outline_to_markdown(outline)
                     return jsonify({
-                        "mind_map": outline
+                        "mind_map_markdown": markdown
                     })
                 else:
                     return jsonify({"error": f"Ollama error: {err}"}), 500
