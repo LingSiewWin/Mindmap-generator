@@ -2,24 +2,250 @@
 <html>
 <head>
     <title>Mind Map Generator</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        pre { background: #f4f4f4; padding: 10px; border-radius: 5px; }
-        .error { color: red; }
+        .mindmap-node circle {
+            fill: #fff;
+            stroke: #4299e1;
+            stroke-width: 2px;
+        }
+        .mindmap-node text {
+            font: 12px sans-serif;
+        }
+        .mindmap-link {
+            fill: none;
+            stroke: #ccc;
+            stroke-width: 1.5px;
+        }
+        .loading {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            z-index: 1000;
+        }
+        .loading-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
     </style>
 </head>
-<body>
-    <h1>Upload PDF or PPTX to Generate Mind Map</h1>
-    <form method="post" enctype="multipart/form-data">
-        <input type="file" name="file" accept=".pdf,.pptx" required>
-        <input type="submit" value="Generate Mind Map">
-    </form>
-    {% if mind_map %}
-        <h2>Generated Mind Map</h2>
-        <pre>{{ mind_map }}</pre>
-    {% endif %}
-    {% if error %}
-        <p class="error">{{ error }}</p>
-    {% endif %}
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">Mind Map Generator</h1>
+            <p class="text-gray-600">Upload your documents and let AI create a mind map for you</p>
+        </div>
+
+        <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
+            <form id="uploadForm" class="space-y-4">
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                    <input type="file" id="fileInput" name="file" accept=".pdf,.pptx,.docx,.txt" 
+                           class="hidden" required>
+                    <label for="fileInput" class="cursor-pointer">
+                        <div class="text-gray-600">
+                            <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                            <p class="mt-1">Click to upload or drag and drop</p>
+                            <p class="text-sm text-gray-500">PDF, PPTX, DOCX, or TXT files</p>
+                        </div>
+                    </label>
+                </div>
+                <button type="submit" class="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition duration-200">
+                    Generate Mind Map
+                </button>
+            </form>
+        </div>
+
+        <div id="result" class="hidden">
+            <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Summary</h2>
+                <p id="summary" class="text-gray-600"></p>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Mind Map</h2>
+                <div id="mindmap" class="w-full h-[600px]"></div>
+            </div>
+        </div>
+
+        <div id="error" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+            <span class="block sm:inline"></span>
+        </div>
+    </div>
+
+    <div id="loading" class="loading">
+        <div class="loading-content">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+            <p class="mt-4 text-gray-600">Processing your document...</p>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showError('Please select a file');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            showLoading();
+            hideError();
+            hideResult();
+
+            try {
+                const response = await fetch('/', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showResult(data);
+                } else {
+                    showError(data.error);
+                }
+            } catch (error) {
+                showError('An error occurred while processing your file');
+            } finally {
+                hideLoading();
+            }
+        });
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.querySelector('span').textContent = message;
+            errorDiv.classList.remove('hidden');
+        }
+
+        function hideError() {
+            document.getElementById('error').classList.add('hidden');
+        }
+
+        function showResult(data) {
+            document.getElementById('result').classList.remove('hidden');
+            document.getElementById('summary').textContent = data.summary;
+            createMindMap(data.mind_map);
+        }
+
+        function hideResult() {
+            document.getElementById('result').classList.add('hidden');
+        }
+
+        function createMindMap(data) {
+            const width = document.getElementById('mindmap').clientWidth;
+            const height = 600;
+            const radius = 100;
+
+            // Clear previous mind map
+            d3.select("#mindmap").selectAll("*").remove();
+
+            const svg = d3.select("#mindmap")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .append("g")
+                .attr("transform", `translate(${width/2},${height/2})`);
+
+            const tree = d3.tree()
+                .size([2 * Math.PI, radius])
+                .separation((a, b) => (a.parent == b.parent ? 1 : 2) / a.depth);
+
+            const root = d3.hierarchy(data);
+            const links = tree(root).links();
+            const nodes = root.descendants();
+
+            svg.selectAll(".mindmap-link")
+                .data(links)
+                .enter()
+                .append("path")
+                .attr("class", "mindmap-link")
+                .attr("d", d3.linkRadial()
+                    .angle(d => d.x)
+                    .radius(d => d.y));
+
+            const node = svg.selectAll(".mindmap-node")
+                .data(nodes)
+                .enter()
+                .append("g")
+                .attr("class", "mindmap-node")
+                .attr("transform", d => `
+                    rotate(${d.x * 180 / Math.PI - 90})
+                    translate(${d.y},0)
+                `);
+
+            node.append("circle")
+                .attr("r", 4);
+
+            node.append("text")
+                .attr("dy", ".31em")
+                .attr("x", d => d.x < Math.PI ? 6 : -6)
+                .attr("text-anchor", d => d.x < Math.PI ? "start" : "end")
+                .attr("transform", d => d.x >= Math.PI ? "rotate(180)" : null)
+                .text(d => d.data.name)
+                .clone(true).lower()
+                .attr("stroke", "white")
+                .attr("stroke-width", 3);
+        }
+
+        // Drag and drop functionality
+        const dropZone = document.querySelector('.border-dashed');
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            dropZone.classList.add('border-blue-500');
+        }
+
+        function unhighlight(e) {
+            dropZone.classList.remove('border-blue-500');
+        }
+
+        dropZone.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            document.getElementById('fileInput').files = files;
+        }
+    </script>
 </body>
 </html>
