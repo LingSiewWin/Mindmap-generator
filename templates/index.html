@@ -32,11 +32,9 @@
             font-size: 1rem;
         }
         .markmap .markmap-node>circle {
-            stroke: #2563eb;
             stroke-width: 2px;
         }
         .markmap .markmap-link {
-            stroke: #a3a3a3;
             stroke-width: 2px;
         }
     </style>
@@ -77,10 +75,25 @@
         <div id="result" class="hidden">
             <div class="bg-white rounded-lg shadow-md p-6">
                 <h2 class="text-2xl font-bold text-gray-800 mb-4">Mind Map</h2>
-                <div class="flex flex-row gap-4 mb-4">
-                    <button id="downloadSvgBtn" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition">Download SVG</button>
-                    <button id="downloadMdBtn" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition">Download Markdown</button>
+                <div class="flex flex-col sm:flex-row gap-4 mb-4 items-center">
+                    <div class="flex flex-row gap-4">
+                        <button id="downloadSvgBtn" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition">Download SVG</button>
+                        <button id="downloadMdBtn" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition">Download Markdown</button>
+                        <button id="downloadPngBtn" class="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded transition">Download PNG</button>
+                    </div>
+                    <div class="flex flex-row gap-2 items-center">
+                        <label for="colorTheme" class="text-gray-700 font-medium">Color Theme:</label>
+                        <select id="colorTheme" class="border border-gray-300 rounded px-2 py-1">
+                            <option value="default">Lucky (Default)</option>
+                            <option value="pastel">Pastel</option>
+                            <option value="vibrant">Vibrant</option>
+                            <option value="dark">Dark</option>
+                            <option value="sunset">Sunset</option>
+                            <option value="forest">Forest</option>
+                        </select>
+                    </div>
                 </div>
+                <div class="text-xs text-gray-500 mb-2">Tip: You can zoom, pan, and collapse/expand nodes in the mind map!</div>
                 <div id="mindmap" class="w-full h-[600px]"></div>
             </div>
         </div>
@@ -99,6 +112,15 @@
 
     <script>
         let lastMarkdown = '';
+        let lastTheme = 'default';
+        let colorPalettes = {
+            default: ['#2563eb', '#16a34a', '#f59e42', '#eab308', '#db2777', '#7c3aed'],
+            pastel: ['#a5b4fc', '#fbcfe8', '#bbf7d0', '#fde68a', '#fca5a5', '#fcd34d'],
+            vibrant: ['#ff595e', '#ffca3a', '#8ac926', '#1982c4', '#6a4c93', '#ff924c'],
+            dark: ['#22223b', '#4a4e69', '#9a8c98', '#c9ada7', '#22223b', '#f2e9e4'],
+            sunset: ['#ffb347', '#ff6961', '#f9844a', '#f6bd60', '#f7ede2', '#f9c74f'],
+            forest: ['#386641', '#6a994e', '#a7c957', '#f2e8cf', '#bc4749', '#386641']
+        };
 
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -158,7 +180,7 @@
         function showResult(data) {
             document.getElementById('result').classList.remove('hidden');
             lastMarkdown = data.mind_map_markdown;
-            renderMarkmap(data.mind_map_markdown);
+            renderMarkmap(data.mind_map_markdown, lastTheme);
         }
 
         function hideResult() {
@@ -166,7 +188,7 @@
         }
 
         // Render mind map using markmap-lib
-        function renderMarkmap(markdown) {
+        function renderMarkmap(markdown, theme = 'default') {
             const mindmapDiv = document.getElementById('mindmap');
             mindmapDiv.innerHTML = '';
             const svg = document.createElement('svg');
@@ -176,12 +198,17 @@
             mindmapDiv.appendChild(svg);
             window.markmap.autoLoader.render(svg, markdown, {
                 color: (node, i) => {
-                    // Color by depth for branches
-                    const colors = ['#2563eb', '#16a34a', '#f59e42', '#eab308', '#db2777', '#7c3aed'];
+                    const colors = colorPalettes[theme] || colorPalettes['default'];
                     return colors[node.depth % colors.length];
                 }
             });
         }
+
+        // Color theme selector
+        document.getElementById('colorTheme').addEventListener('change', function(e) {
+            lastTheme = e.target.value;
+            renderMarkmap(lastMarkdown, lastTheme);
+        });
 
         // Download SVG
         document.getElementById('downloadSvgBtn').addEventListener('click', function() {
@@ -215,6 +242,46 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+        });
+
+        // Download PNG
+        document.getElementById('downloadPngBtn').addEventListener('click', function() {
+            const svg = document.querySelector('#mindmap svg');
+            if (!svg) return;
+            const serializer = new XMLSerializer();
+            let source = serializer.serializeToString(svg);
+            // Add XML declaration if missing
+            if(!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)){
+                source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+            }
+            // Create image
+            const img = new Image();
+            const svgBlob = new Blob([source], {type: 'image/svg+xml;charset=utf-8'});
+            const url = URL.createObjectURL(svgBlob);
+            img.onload = function() {
+                const canvas = document.createElement('canvas');
+                canvas.width = svg.width.baseVal.value || 1200;
+                canvas.height = svg.height.baseVal.value || 600;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+                canvas.toBlob(function(blob) {
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = 'mindmap.png';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(a.href);
+                }, 'image/png');
+                URL.revokeObjectURL(url);
+            };
+            img.onerror = function() {
+                alert('Failed to export PNG.');
+                URL.revokeObjectURL(url);
+            };
+            img.src = url;
         });
 
         // Drag and drop functionality
