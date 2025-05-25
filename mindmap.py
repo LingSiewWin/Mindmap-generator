@@ -10,6 +10,7 @@ import io
 import re
 import json
 import torch
+import requests
 
 app = Flask(__name__)
 
@@ -81,6 +82,36 @@ def generate_mind_map_data(summary):
     
     return mind_map_data
 
+def extract_hierarchical_outline_with_ollama(text):
+    prompt = f'''
+Extract a hierarchical outline from the following text. 
+Output as JSON in this format: 
+{{"name": "Central Topic", "children": [{{"name": "Subtopic", "children": [...]}}]}}
+Text: {text}
+'''
+    try:
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": "llama2",  # or another model you have pulled
+                "prompt": prompt,
+                "stream": False
+            },
+            timeout=120
+        )
+        response.raise_for_status()
+        result = response.json()
+        # Ollama returns the output in the 'response' field
+        outline_str = result.get('response', '').strip()
+        # Find the first and last curly braces to extract JSON
+        start = outline_str.find('{')
+        end = outline_str.rfind('}') + 1
+        json_str = outline_str[start:end]
+        outline = json.loads(json_str)
+        return outline, None
+    except Exception as e:
+        return None, str(e)
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
@@ -104,12 +135,13 @@ def index():
         
         if text:
             try:
-                summary = summarize_text(text)
-                mind_map_data = generate_mind_map_data(summary)
-                return jsonify({
-                    "summary": summary,
-                    "mind_map": mind_map_data
-                })
+                outline, err = extract_hierarchical_outline_with_ollama(text)
+                if outline:
+                    return jsonify({
+                        "mind_map": outline
+                    })
+                else:
+                    return jsonify({"error": f"Ollama error: {err}"}), 500
             except Exception as e:
                 return jsonify({"error": f"Error processing file: {str(e)}"}), 500
         else:
